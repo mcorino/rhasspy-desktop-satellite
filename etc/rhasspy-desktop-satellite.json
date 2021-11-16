@@ -1,0 +1,18 @@
+{
+    "site": "default",
+    "recorder": {
+        "enabled": true,
+    },
+    "player": {
+        "enabled": true
+    },
+    "mqtt": {
+        "host": "localhost",
+        "port": 1883,
+        "authentication": {
+            "username": "foobar",
+            "password": "secretpassword"
+        }
+    }
+}
+

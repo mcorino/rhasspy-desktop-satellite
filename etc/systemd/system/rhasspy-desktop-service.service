@@ -1,0 +1,13 @@
+[Unit]
+Description=Rhasspy Desktop Satellite
+After=network.target
+
+[Service]
+User=rhasspy-satellite
+Group=rhasspy-satellite
+ExecStart=/usr/local/bin/rhasspy-desktop-satellite -d
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

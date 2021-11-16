@@ -1,0 +1,11 @@
+"""This module specifies some information about the package."""
+PROJECT = 'rhasspy-desktop-satellite'
+DESCRIPTION = 'An open source implementation of the audio server AND recorder part of the Hermes protocol'
+KEYWORDS = 'hermes snips python3 rhasspy audio-player audio-recorder audio-server snips-audio-server hermes-protocol voice voice-control'
+AUTHOR = 'Martin Corino'
+EMAIL = 'mcorino@m2c-software.nl'
+LICENSE = 'MIT License'
+GITHUB_URL = 'https://github.com/mcorino/rhasspy-desktop-satellite'
+DOC_URL = 'https://github.com/mcorino/rhasspy-desktop-satellite'
+TRACKER_URL = 'https://github.com/mcorino/rhasspy-desktop-satellite/issues'
+VERSION = '0.1.0-dev'
