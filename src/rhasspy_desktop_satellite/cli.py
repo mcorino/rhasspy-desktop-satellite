@@ -23,12 +23,14 @@ def main(verbose, version, config, daemon):
         config (str): Configuration file.
         daemon (bool): Run as a daemon if True.
     """
+    server = None
     # Define signal handler to cleanly exit the program.
     def exit_process(signal_number, frame):
         # pylint: disable=no-member
         logger.info('Received %s signal. Exiting...',
                     signal.Signals(signal_number).name)
-        server.stop()
+        if not server is None:
+            server.stop()
         sys.exit(0)
 
     # Register signals.
