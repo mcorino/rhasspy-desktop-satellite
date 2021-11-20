@@ -1,4 +1,4 @@
-# Hermes Audio Server
+# Rhasspy Desktop Satellite
 
 [![GitHub license](https://img.shields.io/github/license/mcorino/rhasspy-desktop-satellite.svg)](https://github.com/mcorino/rhasspy-desktop-satellite/blob/master/LICENSE)
 
