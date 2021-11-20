@@ -39,7 +39,7 @@ def main(verbose, version, config, debug):
 
     try:
 
-        logger = get_logger(verbose, debug)
+        logger = get_logger(verbose or version, debug)
         logger.info('%s %s', PROJECT, VERSION)
 
         if not version:

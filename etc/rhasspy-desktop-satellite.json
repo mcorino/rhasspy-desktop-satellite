@@ -2,6 +2,7 @@
     "site": "default",
     "recorder": {
         "enabled": true,
+        "wakeup": false
     },
     "player": {
         "enabled": true

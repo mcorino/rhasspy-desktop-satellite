@@ -1,5 +1,7 @@
 """Classes for the configuration of rhasspy-desktop-satellite."""
 
+from rhasspy_desktop_satellite.config.vad import VADConfig
+
 # Default values
 DEFAULT_DEVICE = None
 DEFAULT_SAMPLE_RATE = 16000
@@ -13,6 +15,7 @@ WAKEUP = 'wakeup'
 SAMPLE_RATE = 'sampleRate'
 SAMPLE_WIDTH = 'sampleWidth'
 CHANNELS = 'channels'
+VAD = 'vad'
 
 # TODO: Define __str__() for each class with explicit settings for debugging.
 class RecorderConfig:
@@ -25,9 +28,10 @@ class RecorderConfig:
         sample_rate (int): Sample rate for recording
         sample_width (int): Sample width for recording
         channels (int): Channels for recording
+        vad (:class:`.VADConfig`): The VAD options of the configuration.
     """
 
-    def __init__(self, enabled=False, device=None, wakeup=False, sample_rate=None, sample_width=None, channels=None):
+    def __init__(self, enabled=False, device=None, wakeup=False, sample_rate=None, sample_width=None, channels=None, vad=None):
         """Initialize a :class:`.RecorderConfig` object.
 
         Args:
@@ -42,6 +46,9 @@ class RecorderConfig:
                 Defaults to 2.
             channels (int): Channels for recording
                 Defaults to 1.
+            vad (:class:`.VADConfig`, optional): The VAD settings. Defaults
+                to a default :class:`.VADConfig` object, which disables voice
+                activity detection.
 
         All arguments are optional.
         """
@@ -51,6 +58,11 @@ class RecorderConfig:
         self.sample_rate = sample_rate
         self.sample_width = sample_width
         self.channels = channels
+
+        if vad is None:
+            self.vad = VADConfig()
+        else:
+            self.vad = vad
 
     @classmethod
     def from_json(cls, json_object=None):
@@ -64,6 +76,11 @@ class RecorderConfig:
         Returns:
             :class:`.RecorderConfig`: An object with the Recorder settings.
 
+        The :attr:`vad` attribute of the :class:`.RecorderConfig` object is
+        initialized with the settings from the configuration file, or not
+        enabled when not specified. The VADConfig is only effectively used
+        when the :attr:`wakeup` attribute is true.
+
         The JSON object should have the following format:
 
         {
@@ -72,7 +89,12 @@ class RecorderConfig:
             "wakeup": False,
             "sampleRate": 16000,
             "sampleWidth": 2,
-            "channels": 1
+            "channels": 1,
+            "vad": {
+                "mode": 0,
+                "silence": 2,
+                "status_messages": true
+            }
         }
         """
         if json_object is None:
@@ -83,6 +105,7 @@ class RecorderConfig:
                       wakeup=json_object.get(WAKEUP, False),
                       sample_rate=json_object.get(SAMPLE_RATE, DEFAULT_SAMPLE_RATE),
                       sample_width=json_object.get(SAMPLE_WIDTH, DEFAULT_SAMPLE_WIDTH),
-                      channels=json_object.get(CHANNELS, DEFAULT_CHANNELS))
+                      channels=json_object.get(CHANNELS, DEFAULT_CHANNELS),
+                      vad=VADConfig.from_json(json_object.get(VAD)))
 
         return ret

@@ -7,6 +7,7 @@ import wave
 from queue import Queue
 import time
 from humanfriendly import format_size
+import webrtcvad
 
 import audioop
 
@@ -14,7 +15,8 @@ from rhasspy_desktop_satellite.exceptions import NoDefaultAudioDeviceError
 from rhasspy_desktop_satellite.mqtt import MQTTClient
 
 AUDIO_FRAME = 'hermes/audioServer/{}/audioFrame'
-CHUNK_SIZE = 2048
+VAD_CHUNK_TIME = 30 # duration of audio chunks for VAD (ms)
+PLAY_CHUNK_SIZE = 2048
 
 ASR_START_LISTENING = 'hermes/asr/startListening'
 ASR_STOP_LISTENING = 'hermes/asr/stopListening'
@@ -77,15 +79,16 @@ class SatelliteServer(MQTTClient):
         self.cv = Condition(self.lock)
         self.listen_audio = False
         self.chunk_queue: Queue = Queue()
-        self.chunk_size = CHUNK_SIZE
-
-        # Frames to skip between audio summaries
-        self.summary_skip_frames = 5
-        self.summary_frames_left = self.summary_skip_frames
 
         self.wakeword_listen = self.recorder_enabled and self.config.recorder.wakeup
         if self.wakeword_listen:
             self.logger.info('Wakeword listening enabled for site %s.', self.config.site)
+
+        self.vad = None
+        if self.wakeword_listen and self.config.recorder.vad.enabled:
+            self.logger.info('Voice Activity Detection enabled with mode %s.',
+                             self.config.recorder.vad.mode)
+            self.vad = webrtcvad.Vad(self.config.recorder.vad.mode)
 
         self.player_enabled = self.config.player.enabled
         self.playing_audio = False
@@ -142,7 +145,7 @@ class SatelliteServer(MQTTClient):
                          self.config.site)
 
         with self.cv:
-            self.play_audio = False
+            self.playing_audio = False
             self.record_audio = self.listen_audio
             self.cv.notify_all()
 
@@ -158,7 +161,7 @@ class SatelliteServer(MQTTClient):
                              self.config.site)
             with self.cv:
                 self.wakeword_listen = True
-                self.record_audio = not self.play_audio
+                self.record_audio = not self.playing_audio
                 self.cv.notify_all()
 
     def on_hotword_off(self, client, userdata, message):
@@ -173,7 +176,7 @@ class SatelliteServer(MQTTClient):
                              self.config.site)
             with self.cv:
                 self.wakeword_listen = False
-                self.record_audio = self.listen_audio and not self.play_audio
+                self.record_audio = self.listen_audio and not self.playing_audio
                 self.cv.notify_all()
 
     def on_start_listening(self, client, userdata, message):
@@ -188,7 +191,7 @@ class SatelliteServer(MQTTClient):
                              self.config.site)
             with self.cv:
                 self.listen_audio = True
-                self.record_audio = not self.play_audio
+                self.record_audio = not self.playing_audio
                 self.cv.notify_all()
 
     def on_stop_listening(self, client, userdata, message):
@@ -203,7 +206,7 @@ class SatelliteServer(MQTTClient):
                              self.config.site)
             with self.cv:
                 self.listen_audio = False
-                self.record_audio = self.wakeword_listen and not self.play_audio
+                self.record_audio = self.wakeword_listen and not self.playing_audio
                 self.cv.notify_all()
 
     def start(self):
@@ -231,48 +234,113 @@ class SatelliteServer(MQTTClient):
         self.logger.debug('Topic: %s', audio_frame_topic)
         self.logger.debug('Message: %d bytes', len(audio_frame_message))
 
+    def is_silence(self, vad_frames, vad_chunk_size, vad_frame_rate) -> bool:
+        """Detect silence in recorded audio"""
+        if not self.vad is None:
+            is_silence = True
+            vad_chunk_len = vad_chunk_size*self.config.recorder.sample_width
+            # Process in chunks of 30ms for webrtcvad
+            while len(vad_frames) >= vad_chunk_len:
+                vad_chunk = vad_frames[: vad_chunk_len]
+                vad_frames = vad_frames[
+                                      vad_chunk_len:
+                                      ]
+
+                # Non-silence in any chunk counts as non-silence
+                is_silence = is_silence and (not self.vad.is_speech(vad_chunk, vad_frame_rate))
+            return is_silence
+        else:
+            return False
+
     def record(self):
         """Record audio."""
+        recorder_framerate = self.config.recorder.sample_rate
+        recorder_samplewidth = self.config.recorder.sample_width
+        recorder_channels = self.config.recorder.channels
+        recorder_chunksize = int(recorder_framerate * (VAD_CHUNK_TIME * 4) / 1000)
         while not self.server_stop:
             if self.record_audio:
                 try:
                     self.logger.debug('Opening audio input stream...')
                     if self.audio_in_index < 0:
-                        stream = self.audio.open(format=self.audio.get_format_from_width(self.config.recorder.sample_width),
-                                                 channels=self.config.recorder.channels,
-                                                 rate=self.config.recorder.sample_rate,
+                        stream = self.audio.open(format=self.audio.get_format_from_width(recorder_samplewidth),
+                                                 channels=recorder_channels,
+                                                 rate=recorder_framerate,
                                                  input=True,
-                                                 frames_per_buffer=CHUNK_SIZE)
+                                                 frames_per_buffer=recorder_chunksize)
                     else:
-                        stream = self.audio.open(format=self.audio.get_format_from_width(self.config.recorder.sample_width),
-                                                 channels=self.config.recorder.channels,
-                                                 rate=self.config.recorder.sample_rate,
+                        stream = self.audio.open(format=self.audio.get_format_from_width(recorder_samplewidth),
+                                                 channels=recorder_channels,
+                                                 rate=recorder_framerate,
                                                  input=True,
                                                  input_device_index=self.audio_in_index,
-                                                 frames_per_buffer=CHUNK_SIZE)
+                                                 frames_per_buffer=recorder_chunksize)
 
                     self.logger.info('Starting broadcasting audio from device %s'
-                                     ' on site %s...', self.audio_in, self.config.site)
+                                     ' on site %s (%d, %d, %d)',
+                                     self.audio_in, self.config.site,
+                                     recorder_framerate, recorder_samplewidth, recorder_channels)
+
+                    in_silence = True
+                    vad_silence = self.config.recorder.vad.silence
+                    silence_frames = int(recorder_framerate / recorder_chunksize * vad_silence)
+                    silence_count = silence_frames
+                    vad_enabled = self.config.recorder.wakeup and self.config.recorder.vad.enabled
+                    vad_convert_mono = recorder_channels > 1
+                    vad_convert_rate = not recorder_framerate in [8000,16000,32000,48000]
+                    vad_framerate = 16000 if vad_convert_rate else recorder_framerate
+                    vad_convert_state = None
+                    vad_chunk_size = int(vad_framerate * VAD_CHUNK_TIME / 1000)
 
                     try:
                         while self.record_audio:
-                            # prevent blocking reads as much as possible
-                            num_avail = stream.get_read_available()
-                            if num_avail > 0:
-                                frames = stream.read(num_frames=CHUNK_SIZE if num_avail > CHUNK_SIZE else num_avail,
-                                                     exception_on_overflow=False)
-                            else:
-                                frames = None
+                            frames = stream.read(recorder_chunksize,
+                                                 exception_on_overflow=False)
                             # if still recording publish the frames
                             if self.record_audio:
                                 if frames:
-                                    self.chunk_queue.put(frames)
+                                    if vad_enabled and self.wakeword_listen:
+                                        # VAD needs mono
+                                        if vad_convert_mono:
+                                            self.logger.debug('Converting frames to mono...')
+                                            vad_frames = audioop.tomono(frames, recorder_framerate, 1, 1)
+                                        else:
+                                            vad_frames = frames
+                                        # rate should be 8, 16, 32 or 48 KHz
+                                        if vad_convert_rate:
+                                            self.logger.debug('Converting frame_rate...')
+                                            vad_frames, vad_convert_state = audioop.ratecv(vad_frames,
+                                                                            recorder_samplewidth,
+                                                                            1,
+                                                                            recorder_framerate,
+                                                                            vad_framerate,
+                                                                            vad_convert_state)
+                                        # check for speech
+                                        self.logger.debug('Checking for speech in %dHz frames (%d bytes)',
+                                                          vad_framerate, len(vad_frames))
+                                        if not self.is_silence(vad_frames, vad_chunk_size, vad_framerate):
+                                            if in_silence:
+                                                in_silence = False
+                                                silence_count = silence_frames
+                                                self.logger.info('Voice activity started on site %s.',
+                                                                 self.config.site)
+                                            self.chunk_queue.put(frames)
+                                        elif (not in_silence):
+                                            if silence_count > 0:
+                                                self.chunk_queue.put(frames)
+                                                silence_count -= 1
+                                            else:
+                                                in_silence = True
+                                                self.logger.info('Voice activity stopped on site %s.',
+                                                                 self.config.site)
+                                    else:
+                                        self.chunk_queue.put(frames)
                                 else:
                                     # Avoid 100% CPU usage
                                     time.sleep(0.01)
                     except Exception as ee:
                         self.logger.exception("record")
-                        self.logger.error('Reading Audio chunks Error for % : %s',
+                        self.logger.error('Reading Audio chunks Error for %s : %s',
                                           self.config.site,
                                           str(ee))
 
@@ -324,7 +392,7 @@ class SatelliteServer(MQTTClient):
         message on MQTT.
         """
         with self.lock:
-            self.play_audio = True
+            self.playing_audio = True
             self.record_audio = False
 
         if self.player_enabled:
@@ -364,7 +432,7 @@ class SatelliteServer(MQTTClient):
                                                      output=True)
 
                         self.logger.debug('Playing WAV buffer on audio output...')
-                        data = wav.readframes(CHUNK_SIZE)
+                        data = wav.readframes(PLAY_CHUNK_SIZE)
 
                         state = None
                         while data:
@@ -375,14 +443,14 @@ class SatelliteServer(MQTTClient):
                             else:
                                 outdata = data
                             stream.write(outdata)
-                            data = wav.readframes(CHUNK_SIZE)
+                            data = wav.readframes(PLAY_CHUNK_SIZE)
 
                         stream.stop_stream()
                         self.logger.debug('Closing audio output stream...')
                         stream.close()
 
                         with self.cv:
-                            self.play_audio = False
+                            self.playing_audio = False
                             self.record_audio = self.listen_audio
                             self.cv.notify_all()
 
