@@ -3,9 +3,10 @@ Description=Rhasspy Desktop Satellite
 After=network.target
 
 [Service]
+Type=idle
 User=rhasspy-satellite
 Group=rhasspy-satellite
-ExecStart=/usr/local/bin/rhasspy-desktop-satellite -d
+ExecStart=/usr/local/bin/rhasspy-desktop-satellite
 Restart=on-failure
 RestartSec=10
 
