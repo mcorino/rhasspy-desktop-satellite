@@ -5,8 +5,6 @@ from json import JSONDecodeError
 import signal
 import sys
 
-from daemon import DaemonContext
-
 from rhasspy_desktop_satellite.about import PROJECT, VERSION
 from rhasspy_desktop_satellite.config import ServerConfig, DEFAULT_CONFIG
 from rhasspy_desktop_satellite.exceptions import ConfigurationFileNotFoundError, \
@@ -14,16 +12,18 @@ from rhasspy_desktop_satellite.exceptions import ConfigurationFileNotFoundError,
 from rhasspy_desktop_satellite.logger import get_logger
 from rhasspy_desktop_satellite.server import SatelliteServer
 
-def main(verbose, version, config, daemon):
+
+def main(verbose, version, config, debug):
     """The main function run by the CLI command.
 
     Args:
         verbose (bool): Use verbose output if True.
         version (bool): Print version information and exit if True.
         config (str): Configuration file.
-        daemon (bool): Run as a daemon if True.
+        debug (bool): Use debugging output if True.
     """
     server = None
+
     # Define signal handler to cleanly exit the program.
     def exit_process(signal_number, frame):
         # pylint: disable=no-member
@@ -39,16 +39,8 @@ def main(verbose, version, config, daemon):
 
     try:
 
-        logger = get_logger(verbose, daemon)
+        logger = get_logger(verbose, debug)
         logger.info('%s %s', PROJECT, VERSION)
-
-        # Start the program as a daemon.
-        if daemon:
-            logger.debug('Starting daemon...')
-            context = DaemonContext(files_preserve=[logger.handlers[0].socket])
-            context.signal_map = {signal.SIGQUIT: exit_process,
-                                  signal.SIGTERM: exit_process}
-            context.open()
 
         if not version:
             if not config:

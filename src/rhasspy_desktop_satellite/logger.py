@@ -27,23 +27,20 @@ def get_domain_socket():
     raise UnsupportedPlatformError(sys.platform)
 
 
-def get_logger(verbose, daemon):
+def get_logger(verbose, debug):
     """Return a Logger object with the right level, formatter and handler."""
 
-    if daemon:
-        handler = SysLogHandler(address=get_domain_socket())
-        formatter = logging.Formatter(fmt=DAEMON_FORMAT.format(LOGGER_NAME))
-        logger = logging.getLogger(LOGGER_NAME)
-    else:
-        handler = colorlog.StreamHandler(stream=sys.stdout)
-        formatter = colorlog.ColoredFormatter(INTERACTIVE_FORMAT,
-                                              log_colors=LOG_COLORS)
-        logger = colorlog.getLogger(LOGGER_NAME)
+    handler = colorlog.StreamHandler(stream=sys.stdout)
+    formatter = colorlog.ColoredFormatter(INTERACTIVE_FORMAT,
+                                          log_colors=LOG_COLORS)
+    logger = colorlog.getLogger(LOGGER_NAME)
 
-    if verbose:
+    if debug:
         logger.setLevel(logging.DEBUG)
-    else:
+    elif verbose:
         logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.WARNING)
 
     handler.setFormatter(formatter)
     logger.addHandler(handler)
