@@ -8,6 +8,7 @@ from queue import Queue
 import time
 from humanfriendly import format_size
 import webrtcvad
+import re
 
 import audioop
 
@@ -50,10 +51,10 @@ class SatelliteServer(MQTTClient):
             channels = device['maxInputChannels']
             if channels:
                 self.logger.debug('[%d] %s (%d)', index, name, int(device['defaultSampleRate']))
-            if self.recorder_enabled and (name == self.config.recorder.device):
+            if self.recorder_enabled and re.match(self.config.recorder.device, name):
                 self.audio_in_index = index
                 self.audio_in = name
-            if self.player_enabled and (name == self.config.player.device):
+            if self.player_enabled and re.match(self.config.player.device, name):
                 self.audio_out_index = index
                 self.audio_out = name
                 self.audio_out_rate = int(device['defaultSampleRate'])
