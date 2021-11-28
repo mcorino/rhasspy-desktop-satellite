@@ -51,13 +51,13 @@ class SatelliteServer(MQTTClient):
             channels = device['maxInputChannels']
             if channels:
                 self.logger.debug('[%d] %s (%d)', index, name, int(device['defaultSampleRate']))
-            if self.recorder_enabled and re.match(self.config.recorder.device, name):
-                self.audio_in_index = index
-                self.audio_in = name
-            if self.player_enabled and re.match(self.config.player.device, name):
-                self.audio_out_index = index
-                self.audio_out = name
-                self.audio_out_rate = int(device['defaultSampleRate'])
+                if self.recorder_enabled and self.config.recorder.device and re.match(self.config.recorder.device, name):
+                    self.audio_in_index = index
+                    self.audio_in = name
+                if self.player_enabled and self.config.player.device and re.match(self.config.player.device, name):
+                    self.audio_out_index = index
+                    self.audio_out = name
+                    self.audio_out_rate = int(device['defaultSampleRate'])
         if self.recorder_enabled and (self.audio_in_index < 0):
             if not self.config.recorder.device is None:
                 self.logger.warning('Could not connect to audio input %s.', self.config.recorder.device)
