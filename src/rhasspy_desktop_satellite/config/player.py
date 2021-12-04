@@ -7,6 +7,7 @@ DEFAULT_DEVICE = None
 ENABLED = 'enabled'
 DEVICE = 'device'
 AUTO_CONVERT = 'auto_convert'
+FRAME_RATE = 'frame_rate'
 
 # TODO: Define __str__() for each class with explicit settings for debugging.
 class PlayerConfig:
@@ -17,9 +18,11 @@ class PlayerConfig:
         device (str): name of the input device to use for the Recorder
         auto_convert (bool): Whether or not the Player should automatically convert
             audio samples in case of unmatched frame rates.
+        frame_rate (int): Frame rate for playback.
+            Defaults to 'defaultSampleRate' of device.
     """
 
-    def __init__(self, enabled=False, device=None, auto_convert=False):
+    def __init__(self, enabled=False, device=None, auto_convert=False, frame_rate=None):
         """Initialize a :class:`.PlayerConfig` object.
 
         Args:
@@ -28,12 +31,15 @@ class PlayerConfig:
                 Defaults to None.
             auto_convert (bool): Whether or not the Player should automatically convert
                 audio samples in case of unmatched frame rates. Defaults to False.
+            frame_rate (int): Frame rate for playback.
+                Defaults to 'defaultSampleRate' of device.
 
         All arguments are optional.
         """
         self.enabled = enabled
         self.device = device
         self.auto_convert = auto_convert
+        self.frame_rate = frame_rate
 
     @classmethod
     def from_json(cls, json_object=None):
@@ -52,7 +58,8 @@ class PlayerConfig:
         {
             "enabled": true,
             "device": "device name",
-            "auto_convert": false
+            "auto_convert": false,
+            "frame_rate": 44100
         }
         """
         if json_object is None:
@@ -60,6 +67,7 @@ class PlayerConfig:
         else:
             ret = cls(enabled=json_object.get(ENABLED, True),
                       device=json_object.get(DEVICE),
-                      auto_convert=json_object.get(AUTO_CONVERT, True))
+                      auto_convert=json_object.get(AUTO_CONVERT, True),
+                      frame_rate=json_object.get(FRAME_RATE))
 
         return ret

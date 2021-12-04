@@ -45,6 +45,7 @@ class SatelliteServer(MQTTClient):
         self.player_enabled = self.config.player.enabled
         self.audio_out = None
         self.audio_out_index = -1
+        self.audio_out_rate = self.config.player.frame_rate
         for index in range(self.audio.get_device_count()):
             device = self.audio.get_device_info_by_index(index)
             name = device['name']
@@ -57,7 +58,7 @@ class SatelliteServer(MQTTClient):
                 if self.player_enabled and self.config.player.device and re.match(self.config.player.device, name):
                     self.audio_out_index = index
                     self.audio_out = name
-                    self.audio_out_rate = int(device['defaultSampleRate'])
+                    self.device_out_rate = int(device['defaultSampleRate'])
         if self.recorder_enabled and (self.audio_in_index < 0):
             if not self.config.recorder.device is None:
                 self.logger.warning('Could not connect to audio input %s.', self.config.recorder.device)
@@ -71,7 +72,7 @@ class SatelliteServer(MQTTClient):
                 self.logger.warning('Could not connect to audio output %s.', self.config.player.device)
             try:
                 self.audio_out = self.audio.get_default_output_device_info()['name']
-                self.audio_out_rate = int(self.audio.get_default_output_device_info()['defaultSampleRate'])
+                self.device_out_rate = int(self.audio.get_default_output_device_info()['defaultSampleRate'])
             except OSError:
                 raise NoDefaultAudioDeviceError('output')
         self.logger.info('Connected to audio output %s.', self.audio_out)
@@ -418,17 +419,16 @@ class SatelliteServer(MQTTClient):
                         self.logger.debug('Frame rate: %s', frame_rate)
 
                         self.logger.debug('Opening audio output stream...')
-                        audio_out_rate = self.audio_out_rate
+                        audio_out_rate = self.device_out_rate if self.audio_out_rate is None else self.audio_out_rate
                         if self.audio_out_index < 0:
                             stream = self.audio.open(format=sample_format,
                                                      channels=n_channels,
-                                                     rate=frame_rate,
+                                                     rate=self.device_out_rate,
                                                      output=True)
-                            audio_out_rate = frame_rate
                         else:
                             stream = self.audio.open(format=sample_format,
                                                      channels=n_channels,
-                                                     rate=self.audio_out_rate,
+                                                     rate=self.device_out_rate,
                                                      output_device_index=self.audio_out_index,
                                                      output=True)
 
@@ -438,9 +438,9 @@ class SatelliteServer(MQTTClient):
                         state = None
                         while data:
                             if self.config.player.auto_convert and (frame_rate != audio_out_rate):
-                                self.logger.debug("Converting frame rate from %d to %d", frame_rate, self.audio_out_rate)
+                                self.logger.debug("Converting frame rate from %d to %d", frame_rate, audio_out_rate)
                                 outdata, state = audioop.ratecv(data, sample_width, n_channels, frame_rate,
-                                                                self.audio_out_rate, state)
+                                                                audio_out_rate, state)
                             else:
                                 outdata = data
                             stream.write(outdata)
